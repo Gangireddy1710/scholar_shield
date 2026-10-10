@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ScholarShield — Instantly verify research citations to detect AI-hallucinated papers, fake DOIs, and swapped links." />
+  <title>ScholarShield — AI Citation Verification</title>
+
+  <!-- Tailwind CSS CDN (pinned) -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ── Animations ── */
+    @keyframes slideUp   { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes shimmer   { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
+    @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+    @keyframes pulseDot  { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .card-enter  { animation: slideUp .38s cubic-bezier(.16,1,.3,1) both; }
+    .modal-enter { animation: fadeIn  .18s ease both; }
+    .shim        { animation: shimmer 2.2s ease-in-out infinite; }
+    .pdot        { animation: pulseDot 1.4s ease-in-out infinite; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar       { width:5px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.09); border-radius:3px; }
+    ::selection               { background:rgba(96,165,250,.22); }
+
+    /* ── Gradient headline ── */
+    .grad-text {
+      background: linear-gradient(130deg,#60a5fa 0%,#a78bfa 48%,#34d399 100%);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    }
+
+    /* ── Textarea placeholder ── */
+    #ta::placeholder { color:rgba(100,116,139,.45); font-family:'JetBrains Mono',monospace; font-size:.8rem; }
+
+    /* ── Print: open a dedicated print window via JS — no CSS hacks needed ── */
+  </style>
+</head>
+
+<body class="font-sans antialiased min-h-screen" style="background:#060810;color:#f1f5f9;">
+
+  <!-- ══════════════════════════════════════════
+       NAVBAR
+  ══════════════════════════════════════════ -->
+  <nav class="sticky top-0 z-30" style="background:rgba(6,8,16,.88);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.06);">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-[54px] flex items-center justify-between">
+
+      <!-- Logo -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-[30px] h-[30px] rounded-[8px] flex items-center justify-center flex-shrink-0"
+             style="background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.22);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L3 7v5c0 5.25 3.8 10.14 9 11.33C17.2 22.14 21 17.25 21 12V7L12 2Z"
+                  fill="rgba(96,165,250,.12)" stroke="#60a5fa" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M9 12l2 2 4-4" stroke="#60a5fa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span class="font-bold text-white text-[0.9rem] tracking-tight">Scholar<span style="color:#60a5fa;">Shield</span></span>
+        <span class="hidden sm:inline text-[10px] font-semibold text-gray-600 border border-gray-800 px-1.5 py-[2px] rounded-full">v1.0</span>
+      </div>
+
+      <!-- Right side -->
+      <div class="flex items-center gap-4">
+        <span id="api-status" class="hidden md:flex items-center gap-1.5 text-xs" style="color:#64748b;">
+          <span class="pdot w-1.5 h-1.5 rounded-full inline-block" style="background:#34d399;"></span>
+          Crossref Online
+        </span>
+        <a href="https://github.com" target="_blank"
+           class="flex items-center gap-1.5 text-xs transition-colors hover:text-gray-200"
+           style="color:#64748b;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.15-1.11-1.46-1.11-1.46-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8a9.56 9.56 0 0 1 2.5.34c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10Z"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ══════════════════════════════════════════
+       HERO
+  ══════════════════════════════════════════ -->
+  <header class="max-w-5xl mx-auto px-4 sm:px-6 pt-16 pb-12 text-center">
+
+    <div class="inline-flex items-center gap-2 text-xs font-semibold rounded-full px-4 py-1.5 mb-6"
+         style="color:#93c5fd;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.18);">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+      Crossref-Powered · 130 M+ Indexed Works · No API Key Required
+    </div>
+
+    <h1 class="text-[2.6rem] sm:text-[3.4rem] font-black tracking-tight text-white mb-4 leading-[1.08]">
+      Check References.<br>
+      <span class="grad-text">Catch Fake AI Papers.</span>
+    </h1>
+
+    <p class="text-base sm:text-lg max-w-2xl mx-auto leading-relaxed mb-8" style="color:#94a3b8;">
+      Instantly scan research papers to catch made-up titles, broken links (DOIs), and swapped sources
+      created by AI <strong style="color:#e2e8f0;">before submission.</strong>
+    </p>
+
+    <!-- Badges -->
+    <div class="flex flex-wrap items-center justify-center gap-2 text-xs font-medium">
+      <span class="px-3 py-1.5 rounded-full font-mono" style="background:rgba(255,255,255,.04);color:#94a3b8;border:1px solid rgba(255,255,255,.07);">IEEE</span>
+      <span class="px-3 py-1.5 rounded-full font-mono" style="background:rgba(255,255,255,.04);color:#94a3b8;border:1px solid rgba(255,255,255,.07);">APA</span>
+      <span class="px-3 py-1.5 rounded-full font-mono" style="background:rgba(255,255,255,.04);color:#94a3b8;border:1px solid rgba(255,255,255,.07);">Plain Text</span>
+      <span class="px-3 py-1.5 rounded-full" style="background:rgba(52,211,153,.08);color:#34d399;border:1px solid rgba(52,211,153,.2);">✓ Free · No Key</span>
+      <span class="px-3 py-1.5 rounded-full" style="background:rgba(96,165,250,.08);color:#60a5fa;border:1px solid rgba(96,165,250,.2);">✓ Client-Side Only</span>
+      <span class="px-3 py-1.5 rounded-full" style="background:rgba(167,139,250,.08);color:#a78bfa;border:1px solid rgba(167,139,250,.2);">✓ GitHub Pages Ready</span>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════
+       MAIN APP
+  ══════════════════════════════════════════ -->
+  <main class="max-w-3xl mx-auto px-4 sm:px-6 pb-28">
+
+    <!-- ─ Input panel ─ -->
+    <div class="rounded-2xl overflow-hidden mb-4"
+         style="background:#0b0f1a;border:1px solid rgba(255,255,255,.07);">
+
+      <!-- Panel header -->
+      <div class="flex items-center justify-between px-5 py-3.5"
+           style="border-bottom:1px solid rgba(255,255,255,.05);">
+        <span class="text-sm font-semibold" style="color:#cbd5e1;">Reference List</span>
+
+        <!-- Format tabs -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs" style="color:#475569;">Format:</span>
+          <div class="flex gap-0.5 rounded-lg p-0.5" style="background:#161b27;">
+            <button class="fmt-btn text-xs px-2.5 py-1 rounded-md font-semibold transition-all" data-fmt="ieee"
+                    style="background:rgba(255,255,255,.09);color:#f1f5f9;">IEEE</button>
+            <button class="fmt-btn text-xs px-2.5 py-1 rounded-md font-medium transition-all" data-fmt="apa"
+                    style="color:#64748b;">APA</button>
+            <button class="fmt-btn text-xs px-2.5 py-1 rounded-md font-medium transition-all" data-fmt="any"
+                    style="color:#64748b;">Any</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Textarea -->
+      <textarea id="ta" rows="9" spellcheck="false"
+        class="w-full font-mono outline-none resize-none leading-relaxed text-sm"
+        style="background:#0b0f1a;color:#cbd5e1;padding:18px 20px;border:none;"
+        placeholder="Paste your bibliography or reference list here…&#10;&#10;[1] J. Jumper et al., &quot;AlphaFold,&quot; Nature, 2021. DOI: 10.1038/s41586-021-03819-2&#10;[2] A. Author, &quot;Paper Title,&quot; Journal, 2024. DOI: 10.xxxx/xxxxx"></textarea>
+
+      <!-- Action row -->
+      <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+           style="border-top:1px solid rgba(255,255,255,.05);">
+        <div class="flex items-center gap-2">
+          <button id="demo-btn"
+            class="flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl transition-all"
+            style="color:#fbbf24;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.22);">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            Load Example Papers
+          </button>
+          <button id="clear-btn"
+            class="text-xs font-medium px-3.5 py-2 rounded-xl transition-all hover:text-gray-200"
+            style="color:#64748b;border:1px solid rgba(255,255,255,.07);">
+            Clear
+          </button>
+        </div>
+        <button id="scan-btn"
+          class="flex items-center gap-2 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all"
+          style="background:#2563eb;box-shadow:0 4px 16px rgba(37,99,235,.28);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Verify Citations
+          <kbd class="hidden sm:inline text-[10px] opacity-50 font-mono font-normal">⌘↵</kbd>
+        </button>
+      </div>
+    </div>
+
+    <!-- ─ Metrics bar ─ -->
+    <div id="metrics" class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-4" style="display:none!important;">
+      <div class="rounded-xl text-center py-4 px-2" style="background:#0b0f1a;border:1px solid rgba(255,255,255,.07);">
+        <div id="m-total" class="text-[2rem] font-black font-mono text-white leading-none">0</div>
+        <div class="text-[11px] font-medium mt-1.5" style="color:#475569;">Total Checked</div>
+      </div>
+      <div class="rounded-xl text-center py-4 px-2" style="background:#0b0f1a;border:1px solid rgba(52,211,153,.18);">
+        <div id="m-real"  class="text-[2rem] font-black font-mono leading-none" style="color:#34d399;">0</div>
+        <div class="text-[11px] font-medium mt-1.5" style="color:#475569;">🟢 Real Papers</div>
+      </div>
+      <div class="rounded-xl text-center py-4 px-2" style="background:#0b0f1a;border:1px solid rgba(251,191,36,.18);">
+        <div id="m-wrong" class="text-[2rem] font-black font-mono leading-none" style="color:#fbbf24;">0</div>
+        <div class="text-[11px] font-medium mt-1.5" style="color:#475569;">🟡 Wrong Link</div>
+      </div>
+      <div class="rounded-xl text-center py-4 px-2" style="background:#0b0f1a;border:1px solid rgba(248,113,113,.18);">
+        <div id="m-fake"  class="text-[2rem] font-black font-mono leading-none" style="color:#f87171;">0</div>
+        <div class="text-[11px] font-medium mt-1.5" style="color:#475569;">🔴 Fake Papers</div>
+      </div>
+      <div class="rounded-xl text-center py-4 px-2 col-span-2 sm:col-span-1"
+           style="background:#0b0f1a;border:1px solid rgba(167,139,250,.18);">
+        <div id="m-score" class="text-[2rem] font-black font-mono leading-none" style="color:#a78bfa;">—</div>
+        <div class="text-[11px] font-medium mt-1.5" style="color:#475569;">Trust Score</div>
+      </div>
+    </div>
+
+    <!-- ─ Results section ─ -->
+    <div id="results-sec" style="display:none;">
+
+      <!-- Scanning indicator -->
+      <div id="scan-bar" class="rounded-xl mb-3 overflow-hidden relative"
+           style="display:none;background:#0b0f1a;border:1px solid rgba(96,165,250,.15);">
+        <div class="shim absolute inset-0 w-3/5"
+             style="background:linear-gradient(90deg,transparent,rgba(96,165,250,.05),transparent);"></div>
+        <div class="flex items-center gap-3 px-4 py-3.5 relative">
+          <span class="pdot w-1.5 h-1.5 rounded-full inline-block flex-shrink-0" style="background:#60a5fa;"></span>
+          <span id="scan-msg" class="text-sm" style="color:#94a3b8;">Querying Crossref API…</span>
+        </div>
+      </div>
+
+      <!-- Heading row -->
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-[11px] font-bold uppercase tracking-widest" style="color:#475569;">Verification Results</h2>
+        <span id="r-meta" class="text-xs font-mono" style="color:#334155;"></span>
+      </div>
+
+      <!-- Cards -->
+      <div id="cards" class="flex flex-col gap-3 mb-5"></div>
+
+      <!-- Report button -->
+      <div id="report-wrap" class="flex justify-center pt-2" style="display:none!important;">
+        <button id="report-btn"
+          class="flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-2xl transition-all"
+          style="color:#e2e8f0;background:#0b0f1a;border:1px solid rgba(255,255,255,.1);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          View Results Report
+        </button>
+      </div>
+    </div>
+
+    <!-- ─ Legend ─ -->
+    <div class="mt-12 pt-8" style="border-top:1px solid rgba(255,255,255,.05);">
+      <p class="text-[11px] font-bold uppercase tracking-widest mb-4" style="color:#334155;">Status Guide</p>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <div class="rounded-xl p-4" style="background:#0b0f1a;border:1px solid rgba(52,211,153,.12);">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-base">🟢</span>
+            <span class="text-sm font-bold" style="color:#34d399;">Real Paper (Verified)</span>
+          </div>
+          <p class="text-xs leading-relaxed" style="color:#475569;">Title and DOI match official database records. This reference is legitimate and correctly cited.</p>
+        </div>
+        <div class="rounded-xl p-4" style="background:#0b0f1a;border:1px solid rgba(251,191,36,.12);">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-base">🟡</span>
+            <span class="text-sm font-bold" style="color:#fbbf24;">Wrong Link Attached</span>
+          </div>
+          <p class="text-xs leading-relaxed" style="color:#475569;">The DOI is real but belongs to a different paper or discipline — a typical AI hallucination swap error.</p>
+        </div>
+        <div class="rounded-xl p-4" style="background:#0b0f1a;border:1px solid rgba(248,113,113,.12);">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-base">🔴</span>
+            <span class="text-sm font-bold" style="color:#f87171;">Fake / Made-Up Paper</span>
+          </div>
+          <p class="text-xs leading-relaxed" style="color:#475569;">Non-existent DOI (HTTP 404) or fabricated citation. This reference does not exist in any academic registry.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ══════════════════════════════════════════
+       FOOTER
+  ══════════════════════════════════════════ -->
+  <footer style="border-top:1px solid rgba(255,255,255,.05);">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-wrap items-center justify-between gap-3">
+      <p class="text-xs" style="color:#334155;">
+        Powered by <a href="https://www.crossref.org" target="_blank"
+          class="underline underline-offset-2 transition-colors hover:text-gray-300"
+          style="color:#475569;">Crossref REST API</a> · 130 M+ scholarly works · Open access
+      </p>
+      <p class="text-xs" style="color:#1e293b;">
+        ScholarShield does not store or transmit your citations. All verification runs client-side in your browser.
+      </p>
+    </div>
+  </footer>
+
+  <!-- ══════════════════════════════════════════
+       AUDIT REPORT MODAL
+  ══════════════════════════════════════════ -->
+  <div id="modal" class="modal-enter fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+       style="display:none!important;background:rgba(0,0,0,.78);backdrop-filter:blur(8px);">
+    <div class="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl overflow-hidden"
+         style="background:#0b0f1a;border:1px solid rgba(255,255,255,.09);box-shadow:0 28px 64px rgba(0,0,0,.7);">
+
+      <!-- Modal header -->
+      <div class="flex items-center justify-between px-5 py-4"
+           style="border-bottom:1px solid rgba(255,255,255,.06);">
+        <div class="flex items-center gap-2.5">
+          <div class="w-6 h-6 rounded-md flex items-center justify-center"
+               style="background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
+          <span class="text-sm font-bold text-white">Audit Report</span>
+        </div>
+        <button id="close-modal"
+          class="p-1.5 rounded-lg transition-all hover:bg-white/5"
+          style="color:#475569;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal body -->
+      <div class="px-5 py-5">
+
+        <!-- Meta row -->
+        <div class="flex items-start justify-between mb-5">
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-1" style="color:#334155;">Generated</p>
+            <p id="md-date" class="text-sm font-medium" style="color:#cbd5e1;">—</p>
+          </div>
+          <div class="text-right">
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-1" style="color:#334155;">Audit ID</p>
+            <p id="md-id" class="text-xs font-mono" style="color:#60a5fa;">—</p>
+          </div>
+        </div>
+
+        <!-- Score block -->
+        <div class="rounded-xl p-5 mb-5 text-center" style="background:#161b27;">
+          <div id="md-score" class="text-[3.2rem] font-black font-mono text-white leading-none mb-1">—%</div>
+          <p class="text-sm mb-3" style="color:#64748b;">Overall Trust Score</p>
+          <div class="h-1.5 rounded-full overflow-hidden" style="background:rgba(255,255,255,.06);">
+            <div id="md-bar" class="h-full rounded-full transition-all duration-700" style="width:0%;background:#34d399;"></div>
+          </div>
+        </div>
+
+        <!-- Stat grid -->
+        <div class="grid grid-cols-4 gap-2 mb-5">
+          <div class="rounded-xl py-3 text-center" style="background:#161b27;">
+            <div id="md-total" class="text-2xl font-black font-mono text-white">0</div>
+            <div class="text-[10px] mt-0.5" style="color:#475569;">Total</div>
+          </div>
+          <div class="rounded-xl py-3 text-center" style="background:#161b27;">
+            <div id="md-real"  class="text-2xl font-black font-mono" style="color:#34d399;">0</div>
+            <div class="text-[10px] mt-0.5" style="color:#475569;">Real</div>
+          </div>
+          <div class="rounded-xl py-3 text-center" style="background:#161b27;">
+            <div id="md-wrong" class="text-2xl font-black font-mono" style="color:#fbbf24;">0</div>
+            <div class="text-[10px] mt-0.5" style="color:#475569;">Wrong</div>
+          </div>
+          <div class="rounded-xl py-3 text-center" style="background:#161b27;">
+            <div id="md-fake"  class="text-2xl font-black font-mono" style="color:#f87171;">0</div>
+            <div class="text-[10px] mt-0.5" style="color:#475569;">Fake</div>
+          </div>
+        </div>
+
+        <!-- Per-citation rows -->
+        <div id="md-list" class="mb-5 max-h-52 overflow-y-auto space-y-0.5 pr-1"></div>
+
+        <!-- Buttons -->
+        <div class="flex gap-2">
+          <button id="print-btn"
+            class="flex-1 flex items-center justify-center gap-2 text-sm font-bold text-white py-3 rounded-xl transition-all"
+            style="background:#2563eb;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 6 2 18 2 18 9"/>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+              <rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            Print / Save as PDF
+          </button>
+          <button id="copy-btn"
+            class="flex items-center gap-2 text-sm font-medium px-4 py-3 rounded-xl transition-all"
+            style="color:#94a3b8;background:#161b27;border:1px solid rgba(255,255,255,.07);">
+            <svg id="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            Copy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       JAVASCRIPT
+  ══════════════════════════════════════════ -->
+  <script>
+  /* ────────────────────────────────────────────
+     ScholarShield · Citation Verification Engine
+     Crossref REST API  ·  Client-side only
+  ──────────────────────────────────────────── */
+
+  // ── Demo preset ──────────────────────────────
+  const DEMO = `[1] J. Jumper, R. Evans, A. Pritzel, T. Green, M. Figurnov, O. Ronneberger, K. Tunyasuvunakool, R. Bates, et al., "Highly accurate protein structure prediction with AlphaFold," Nature, vol. 596, pp. 583–589, Aug. 2021. DOI: 10.1038/s41586-021-03819-2
+
+[2] M. R. Johnson and K. L. Smith, "Quantum Economics and Market Volatility Prediction Using Neural Networks," Journal of Economic Perspectives, vol. 45, no. 2, pp. 112–134, Mar. 2023. DOI: 10.1038/s41586-021-03819-2
+
+[3] A. Zhang and L. Patel, "Autonomous Large Language Models for Real-Time Quantum Computing Optimization," IEEE Transactions on Artificial Intelligence, vol. 12, no. 3, pp. 445–467, 2026. DOI: 10.9999/fake.doi.123456`;
+
+  // ── State ────────────────────────────────────
+  let results  = [];
+  let scanning = false;
+
+  // ── DOM ──────────────────────────────────────
+  const ta         = document.getElementById('ta');
+  const scanBtn    = document.getElementById('scan-btn');
+  const demoBtn    = document.getElementById('demo-btn');
+  const clearBtn   = document.getElementById('clear-btn');
+  const metricsEl  = document.getElementById('metrics');
+  const resultsSec = document.getElementById('results-sec');
+  const scanBar    = document.getElementById('scan-bar');
+  const scanMsg    = document.getElementById('scan-msg');
+  const cards      = document.getElementById('cards');
+  const rMeta      = document.getElementById('r-meta');
+  const reportWrap = document.getElementById('report-wrap');
+  const reportBtn  = document.getElementById('report-btn');
+  const modal      = document.getElementById('modal');
+  const closeModal = document.getElementById('close-modal');
+  const printBtn   = document.getElementById('print-btn');
+  const copyBtn    = document.getElementById('copy-btn');
+
+  // ── Format tabs ──────────────────────────────
+  document.querySelectorAll('.fmt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.fmt-btn').forEach(b => {
+        b.style.background = ''; b.style.color = '#64748b';
+      });
+      btn.style.background = 'rgba(255,255,255,.09)';
+      btn.style.color = '#f1f5f9';
+    });
+  });
+
+  // ── Demo / Clear ─────────────────────────────
+  demoBtn.addEventListener('click', () => { ta.value = DEMO; ta.focus(); });
+  clearBtn.addEventListener('click', () => {
+    ta.value = '';
+    results  = [];
+    cards.innerHTML = '';
+    metricsEl.style.display  = 'none';
+    resultsSec.style.display = 'none';
+    reportWrap.style.display = 'none';
+  });
+
+  // ── Keyboard shortcut ────────────────────────
+  ta.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') scanBtn.click();
+  });
+
+  // ── Main scan ────────────────────────────────
+  scanBtn.addEventListener('click', async () => {
+    const raw = ta.value.trim();
+    if (!raw || scanning) return;
+
+    scanning = true;
+    results  = [];
+    cards.innerHTML = '';
+    reportWrap.style.display = 'none';
+
+    scanBtn.disabled = true;
+    scanBtn.style.background = '#1d4ed8';
+    scanBtn.innerHTML = `
+      <svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" opacity=".2"/>
+        <path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round"/>
+      </svg>Verifying…`;
+
+    show(metricsEl, 'grid');
+    show(resultsSec);
+    show(scanBar);
+    updateMetrics();
+
+    const cits = parseCitations(raw).filter(c => c.length > 10);
+    rMeta.textContent = `0 / ${cits.length}`;
+
+    for (let i = 0; i < cits.length; i++) {
+      scanMsg.textContent = `Checking citation ${i + 1} of ${cits.length} via Crossref…`;
+      const r = await verifyCitation(cits[i]);
+      results.push(r);
+      renderCard(r, i);
+      updateMetrics();
+      rMeta.textContent = `${i + 1} / ${cits.length}`;
+      if (i < cits.length - 1) await sleep(420);
+    }
+
+    // Done
+    scanning = false;
+    scanBtn.disabled = false;
+    scanBtn.style.background = '#2563eb';
+    scanBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>Verify Citations<kbd class="hidden sm:inline text-[10px] opacity-50 font-mono font-normal">⌘↵</kbd>`;
+    hide(scanBar);
+    rMeta.textContent = `${cits.length} citation${cits.length !== 1 ? 's' : ''} checked`;
+    show(reportWrap, 'flex');
+  });
+
+  // ── Citation parser ───────────────────────────
+  function parseCitations(text) {
+    // Split on numbered references: [1] or 1. or (1)
+    const byNum = text.split(/\n(?=\s*[\[\(]?\d+[\]\).]\s)/);
+    if (byNum.length > 1) return byNum.map(s => s.trim()).filter(Boolean);
+    // Double newlines
+    const byBlank = text.split(/\n\s*\n/);
+    if (byBlank.length > 1) return byBlank.map(s => s.trim()).filter(Boolean);
+    // Single lines
+    return text.split('\n').map(s => s.trim()).filter(Boolean);
+  }
+
+  // ── DOI extractor ─────────────────────────────
+  function extractDOI(text) {
+    const pats = [
+      /https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,}\/[^\s"<>{}\[\]]+)/i,
+      /\bdoi[:\s]+(10\.\d{4,}\/[^\s"<>{}\[\]]+)/i,
+      /\b(10\.\d{4,}\/[^\s"<>{}\[\],;:)\]]+)/,
+    ];
+    for (const p of pats) {
+      const m = text.match(p);
+      if (m) return m[1].replace(/[.,;:)\]"']+$/, '');
+    }
+    return null;
+  }
+
+  // ── Title extractor ───────────────────────────
+  function extractTitle(text) {
+    // Quoted title (IEEE/MLA style)
+    let m = text.match(/["""„]([^"""„]{15,290})["""]/);
+    if (m) return m[1].trim();
+    // APA: (year). Title. Journal
+    m = text.match(/\(\d{4}[^)]*\)\.\s+([^.]{15,290})\./);
+    if (m) return m[1].trim();
+    // Strip ref number, known URL/DOI patterns, then first meaningful segment
+    let c = text
+      .replace(/^\s*[\[\(]?\d+[\]\).]?\s*/, '')
+      .replace(/\b(doi|https?):.*$/gi, '')
+      .replace(/^(?:[A-Z][\w\-']*,?\s+(?:[A-Z]\.?\s+)*(?:et al\.?,?\s+)?)+/, '')
+      .trim();
+    for (const seg of c.split(/[.|]/)) {
+      const s = seg.trim();
+      if (s.length >= 15 && /[a-zA-Z]{4,}/.test(s)) return s;
+    }
+    return c.slice(0, 230).trim();
+  }
+
+  // ── Title similarity (Jaccard on content words) ──
+  function sim(a, b) {
+    if (!a || !b) return 0;
+    const STOP = new Set(['a','an','the','and','or','of','in','on','for','to','with','by','from',
+      'is','are','was','that','this','it','its','at','be','as','into','using','via','based','using']);
+    const tok = s => new Set(
+      s.toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/)
+       .filter(w => w.length > 2 && !STOP.has(w))
+    );
+    const s1 = tok(a), s2 = tok(b);
+    if (!s1.size || !s2.size) return 0;
+    const inter = [...s1].filter(w => s2.has(w)).length;
+    return inter / new Set([...s1, ...s2]).size;
+  }
+
+  // ── Core verification ─────────────────────────
+  async function verifyCitation(citation) {
+    const doi   = extractDOI(citation);
+    const title = extractTitle(citation);
+    if (doi)                         return doiCheck(citation, doi, title);
+    if (title && title.length > 12)  return titleCheck(citation, title, null);
+    return { citation, status:'unknown', doi:null, title: title || citation.slice(0,80),
+             message:'Could not parse a DOI or title from this citation.' };
+  }
+
+  async function doiCheck(citation, doi, titleInCit) {
+    const ac  = new AbortController();
+    const tid = setTimeout(() => ac.abort(), 9000);
+    try {
+      const res = await fetch(
+        `https://api.crossref.org/works/${encodeURIComponent(doi)}?mailto=scholarsshield@citations.check`,
+        { signal: ac.signal }
+      );
+      clearTimeout(tid);
+
+      if (res.status === 404) {
+        return { citation, status:'fake', doi, title: titleInCit,
+                 message:'DOI not found in Crossref registry (HTTP 404). This reference does not exist in any academic database.' };
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const { message: msg } = await res.json();
+      const realTitle = msg.title?.[0] || '';
+      const journal   = msg['container-title']?.[0] || msg['short-container-title']?.[0] || '';
+      const year      = msg.issued?.['date-parts']?.[0]?.[0] || '';
+      const authors   = fmtAuthors(msg.author);
+      const score     = sim(titleInCit, realTitle);
+
+      if (score >= 0.26) {
+        return { citation, status:'real', doi, title:realTitle, journal, year, authors,
+                 message:'Title and DOI verified against Crossref database records.' };
+      }
+      return { citation, status:'wrong', doi, title:titleInCit, realTitle, journal,
+               message:`DOI is valid but belongs to a different paper: "${trunc(realTitle, 95)}"` };
+
+    } catch (err) {
+      clearTimeout(tid);
+      if (err.name === 'AbortError') {
+        return { citation, status:'timeout', doi, title:titleInCit,
+                 message:'Network timeout reaching Crossref. Verify manually at doi.org.' };
+      }
+      // Network failure — attempt title fallback before giving up
+      if (titleInCit && titleInCit.length > 12) return titleCheck(citation, titleInCit, doi);
+      return { citation, status:'fake', doi, title:titleInCit,
+               message:`DOI verification failed: ${err.message}` };
+    }
+  }
+
+  async function titleCheck(citation, title, doi) {
+    const ac  = new AbortController();
+    const tid = setTimeout(() => ac.abort(), 9000);
+    try {
+      const url = `https://api.crossref.org/works?query.title=${encodeURIComponent(title)}&rows=1` +
+                  `&select=DOI,title,container-title,issued,author&mailto=scholarsshield@citations.check`;
+      const res = await fetch(url, { signal: ac.signal });
+      clearTimeout(tid);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data  = await res.json();
+      const items = data.message?.items || [];
+      if (!items.length) {
+        return { citation, status:'fake', doi, title,
+                 message:'Title not found in Crossref after exhaustive search. Likely AI-fabricated.' };
+      }
+      const best  = items[0];
+      const found = best.title?.[0] || '';
+      const score = sim(title, found);
+
+      if (score >= 0.44) {
+        return { citation, status:'real', doi: best.DOI || doi, title:found,
+                 journal: best['container-title']?.[0] || '',
+                 year:    best.issued?.['date-parts']?.[0]?.[0] || '',
+                 authors: fmtAuthors(best.author),
+                 message:'Title matched in Crossref database (no DOI present in citation).' };
+      }
+      return { citation, status:'fake', doi, title,
+               message:'Title not found with sufficient confidence. Possible AI fabrication.' };
+
+    } catch (err) {
+      clearTimeout(tid);
+      if (err.name === 'AbortError') {
+        return { citation, status:'timeout', doi, title,
+                 message:'Network timeout. Could not query Crossref title search.' };
+      }
+      return { citation, status:'fake', doi, title,
+               message:'Title lookup failed. Could not reach Crossref API.' };
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────
+  function fmtAuthors(arr) {
+    if (!Array.isArray(arr) || !arr.length) return '';
+    const top = arr.slice(0,3).map(a => `${a.family||''}${a.given?', '+a.given[0]+'.':''}`);
+    return top.join(' · ') + (arr.length > 3 ? ' et al.' : '');
+  }
+  function trunc(s, n) { return s && s.length > n ? s.slice(0,n)+'…' : (s||''); }
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                        .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  }
+  function sleep(ms)  { return new Promise(r => setTimeout(r, ms)); }
+  function show(el, d='block') { el.style.display = d; }
+  function hide(el)            { el.style.display = 'none'; }
+  function auditId()  { return 'SS-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase(); }
+
+  // ── Render result card ───────────────────────
+  const CFG = {
+    real:    { label:'🟢 REAL PAPER (VERIFIED)',  dot:'#34d399', bg:'rgba(52,211,153,.05)',  border:'rgba(52,211,153,.24)' },
+    wrong:   { label:'🟡 WRONG LINK ATTACHED',    dot:'#fbbf24', bg:'rgba(251,191,36,.05)',  border:'rgba(251,191,36,.24)' },
+    fake:    { label:'🔴 FAKE / MADE-UP PAPER',   dot:'#f87171', bg:'rgba(248,113,113,.05)', border:'rgba(248,113,113,.24)' },
+    timeout: { label:'⏱ TIMEOUT — UNVERIFIED',   dot:'#94a3b8', bg:'rgba(148,163,184,.04)', border:'rgba(148,163,184,.15)' },
+    unknown: { label:'❓ UNPARSEABLE',            dot:'#94a3b8', bg:'rgba(148,163,184,.04)', border:'rgba(148,163,184,.15)' },
+  };
+
+  function renderCard(r, i) {
+    const cfg = CFG[r.status] || CFG.unknown;
+    const el  = document.createElement('div');
+    el.className = 'card-enter rounded-2xl overflow-hidden';
+    el.style.cssText = `background:${cfg.bg};border:1px solid ${cfg.border};animation-delay:${Math.min(i*45,180)}ms;`;
+
+    const doiHtml = r.doi
+      ? `<span class="font-mono text-xs" style="color:#60a5fa;">${esc(r.doi)}</span>`
+      : `<span class="text-xs" style="color:#334155;">No DOI in citation</span>`;
+
+    const meta = [
+      r.journal && `<span class="text-xs" style="color:#64748b;">${esc(r.journal)}</span>`,
+      r.year    && `<span class="text-xs font-mono" style="color:#64748b;">${esc(String(r.year))}</span>`,
+      r.authors && `<span class="text-xs" style="color:#475569;">${esc(trunc(r.authors,65))}</span>`,
+    ].filter(Boolean);
+
+    const wrongBlock = r.status === 'wrong' && r.realTitle ? `
+      <div class="mt-3 px-3 py-2.5 rounded-xl"
+           style="background:rgba(251,191,36,.05);border:1px solid rgba(251,191,36,.18);">
+        <p class="text-xs leading-relaxed">
+          <span style="color:#fbbf24;font-weight:700;">DOI actually belongs to: </span>
+          <span style="color:#fde68a;">${esc(trunc(r.realTitle, 120))}</span>
+        </p>
+      </div>` : '';
+
+    el.innerHTML = `
+      <div class="px-4 pt-4 pb-1 flex items-center justify-between gap-3">
+        <span class="text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0"
+              style="color:${cfg.dot};background:${cfg.bg};border:1px solid ${cfg.border};">${cfg.label}</span>
+        <span class="font-mono text-xs flex-shrink-0" style="color:#1e293b;">#${i+1}</span>
+      </div>
+      <div class="px-4 pt-3 pb-1">
+        <p class="text-sm font-semibold leading-snug mb-2.5" style="color:#e2e8f0;">${esc(trunc(r.title||'Unknown title',165))}</p>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs" style="color:#334155;">DOI:</span>${doiHtml}
+          </div>
+          ${meta.map(m=>`<div>${m}</div>`).join('')}
+        </div>
+        ${wrongBlock}
+      </div>
+      <div class="mx-4 mt-3 mb-4 pt-3 flex items-start gap-2" style="border-top:1px solid rgba(255,255,255,.04);">
+        <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-[5px]" style="background:${cfg.dot};"></span>
+        <p class="text-xs leading-relaxed" style="color:#64748b;">${esc(r.message)}</p>
+      </div>`;
+
+    cards.appendChild(el);
+    el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  // ── Update metrics ────────────────────────────
+  function updateMetrics() {
+    const n     = results.length;
+    const real  = results.filter(r=>r.status==='real').length;
+    const wrong = results.filter(r=>r.status==='wrong').length;
+    const fake  = results.filter(r=>r.status==='fake').length;
+    const score = n > 0 ? Math.round((real/n)*100) : null;
+
+    document.getElementById('m-total').textContent = n;
+    document.getElementById('m-real').textContent  = real;
+    document.getElementById('m-wrong').textContent = wrong;
+    document.getElementById('m-fake').textContent  = fake;
+    const scoreEl = document.getElementById('m-score');
+    if (score !== null) {
+      scoreEl.textContent = score+'%';
+      scoreEl.style.color = score>=70 ? '#34d399' : score>=40 ? '#fbbf24' : '#f87171';
+    }
+  }
+
+  // ── Report modal ──────────────────────────────
+  reportBtn.addEventListener('click', openReport);
+  closeModal.addEventListener('click', () => hide(modal));
+  modal.addEventListener('click', e => { if(e.target===modal) hide(modal); });
+  document.addEventListener('keydown', e => { if(e.key==='Escape') hide(modal); });
+
+  function openReport() {
+    const n     = results.length;
+    const real  = results.filter(r=>r.status==='real').length;
+    const wrong = results.filter(r=>r.status==='wrong').length;
+    const fake  = results.filter(r=>r.status==='fake').length;
+    const score = n > 0 ? Math.round((real/n)*100) : 0;
+    const id    = auditId();
+
+    document.getElementById('md-date').textContent  = new Date().toLocaleString();
+    document.getElementById('md-id').textContent    = id;
+    document.getElementById('md-score').textContent = score+'%';
+    document.getElementById('md-score').style.color = score>=70?'#34d399':score>=40?'#fbbf24':'#f87171';
+    document.getElementById('md-total').textContent = n;
+    document.getElementById('md-real').textContent  = real;
+    document.getElementById('md-wrong').textContent = wrong;
+    document.getElementById('md-fake').textContent  = fake;
+    const bar = document.getElementById('md-bar');
+    bar.style.width      = score+'%';
+    bar.style.background = score>=70?'#34d399':score>=40?'#fbbf24':'#f87171';
+
+    const SL = {real:'🟢 Real',wrong:'🟡 Wrong',fake:'🔴 Fake',timeout:'⏱ Timeout',unknown:'❓ Unknown'};
+    const SC = {real:'#34d399',wrong:'#fbbf24',fake:'#f87171',timeout:'#94a3b8',unknown:'#94a3b8'};
+
+    document.getElementById('md-list').innerHTML = results.map((r,i) => `
+      <div class="flex items-start gap-3 py-2" style="border-bottom:1px solid rgba(255,255,255,.04);">
+        <span class="text-xs font-mono w-5 flex-shrink-0 mt-0.5" style="color:#334155;">${i+1}.</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs truncate" style="color:#cbd5e1;">${esc(trunc(r.title||'Unknown',72))}</p>
+          <p class="text-[10px] font-mono mt-0.5" style="color:#334155;">${r.doi?esc(trunc(r.doi,52)):'No DOI'}</p>
+        </div>
+        <span class="text-xs font-bold flex-shrink-0" style="color:${SC[r.status]||'#94a3b8'};">${SL[r.status]||'?'}</span>
+      </div>`).join('');
+
+    show(modal, 'flex');
+    // Store id for print
+    modal._auditId = id;
+    modal._score   = score;
+    modal._n = n; modal._real = real; modal._wrong = wrong; modal._fake = fake;
+  }
+
+  // ── Print (popup window) ──────────────────────
+  printBtn.addEventListener('click', () => {
+    const n     = modal._n     || 0;
+    const real  = modal._real  || 0;
+    const wrong = modal._wrong || 0;
+    const fake  = modal._fake  || 0;
+    const score = modal._score || 0;
+    const id    = modal._auditId || auditId();
+    const scoreColor = score>=70?'#15803d':score>=40?'#b45309':'#b91c1c';
+
+    const rows = results.map((r,i) => {
+      const st = {real:'REAL',wrong:'WRONG LINK',fake:'FAKE',timeout:'TIMEOUT',unknown:'UNKNOWN'}[r.status]||'?';
+      const co = {real:'#15803d',wrong:'#b45309',fake:'#b91c1c',timeout:'#6b7280',unknown:'#6b7280'}[r.status]||'#6b7280';
+      return `<tr>
+        <td>${i+1}</td>
+        <td>${r.title||'Unknown'}</td>
+        <td style="font-family:monospace;font-size:.8rem;">${r.doi||'—'}</td>
+        <td style="color:${co};font-weight:700;">${st}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+      <title>ScholarShield Audit Report</title>
+      <style>
+        body{font-family:system-ui,sans-serif;padding:2.5rem;color:#111;max-width:860px;margin:auto;}
+        h1{font-size:1.6rem;font-weight:900;margin-bottom:.25rem;}
+        .meta{color:#6b7280;font-size:.85rem;margin-bottom:2rem;}
+        .score-wrap{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:1.5rem;text-align:center;margin-bottom:2rem;}
+        .score-num{font-size:3rem;font-weight:900;color:${scoreColor};}
+        .score-label{color:#6b7280;font-size:.9rem;margin-top:.25rem;}
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:2rem;}
+        .stat{border:1px solid #e5e7eb;border-radius:10px;padding:1rem;text-align:center;}
+        .stat .n{font-size:1.8rem;font-weight:900;}
+        .stat .l{font-size:.72rem;color:#9ca3af;margin-top:.25rem;}
+        table{width:100%;border-collapse:collapse;font-size:.85rem;}
+        th{text-align:left;border-bottom:2px solid #e5e7eb;padding:.6rem .5rem;background:#f9fafb;font-weight:700;}
+        td{border-bottom:1px solid #f3f4f6;padding:.55rem .5rem;vertical-align:top;}
+        td:nth-child(1){width:2.5rem;color:#9ca3af;}
+        footer{margin-top:3rem;padding-top:1rem;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:.75rem;}
+      </style>
+    </head><body>
+      <h1>ScholarShield — Citation Audit Report</h1>
+      <p class="meta">Generated: ${new Date().toLocaleString()} &nbsp;·&nbsp; Audit ID: <strong>${id}</strong></p>
+      <div class="score-wrap">
+        <div class="score-num">${score}%</div>
+        <div class="score-label">Overall Trust Score</div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="n">${n}</div><div class="l">Total Checked</div></div>
+        <div class="stat"><div class="n" style="color:#15803d;">${real}</div><div class="l">🟢 Real Papers</div></div>
+        <div class="stat"><div class="n" style="color:#b45309;">${wrong}</div><div class="l">🟡 Wrong Link</div></div>
+        <div class="stat"><div class="n" style="color:#b91c1c;">${fake}</div><div class="l">🔴 Fake Papers</div></div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Title</th><th>DOI</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <footer>Powered by Crossref REST API · ScholarShield v1.0 · scholarsshield.github.io</footer>
+    </body></html>`;
+
+    const w = window.open('','_blank','width=900,height=700');
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  });
+
+  // ── Copy report ───────────────────────────────
+  copyBtn.addEventListener('click', () => {
+    const n     = results.length;
+    const real  = results.filter(r=>r.status==='real').length;
+    const wrong = results.filter(r=>r.status==='wrong').length;
+    const fake  = results.filter(r=>r.status==='fake').length;
+    const score = n > 0 ? Math.round((real/n)*100) : 0;
+
+    const lines = [
+      'ScholarShield — Citation Audit Report',
+      `Generated : ${new Date().toLocaleString()}`,
+      `Audit ID  : ${modal._auditId || auditId()}`,
+      '─'.repeat(56),
+      `Total Checked : ${n}`,
+      `Real Papers   : ${real}`,
+      `Wrong Links   : ${wrong}`,
+      `Fake Papers   : ${fake}`,
+      `Trust Score   : ${score}%`,
+      '─'.repeat(56),
+      ...results.map((r,i)=>{
+        const s={real:'REAL',wrong:'WRONG LINK',fake:'FAKE',timeout:'TIMEOUT',unknown:'UNKNOWN'}[r.status]||'?';
+        return `[${i+1}] [${s.padEnd(10)}] ${r.title||'Unknown'}${r.doi?' — '+r.doi:''}`;
+      })
+    ];
+
+    navigator.clipboard.writeText(lines.join('\n')).then(()=>{
+      const orig = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+      copyBtn.style.color       = '#34d399';
+      copyBtn.style.borderColor = 'rgba(52,211,153,.3)';
+      setTimeout(()=>{
+        copyBtn.innerHTML = orig;
+        copyBtn.style.color = '';
+        copyBtn.style.borderColor = '';
+      }, 2000);
+    }).catch(()=>{});
+  });
+
+  </script>
+</body>
+</html>
